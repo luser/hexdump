@@ -1,0 +1,14 @@
+[root]
+name = "hexdump"
+version = "0.1.0"
+dependencies = [
+ "fallible-streaming-iterator 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "fallible-streaming-iterator"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[metadata]
+"checksum fallible-streaming-iterator 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)" = "e071aaaba317f3c25ba002e6d8f11afb6093e5d4a2d7b5e164e45d219255fb13"
