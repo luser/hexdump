@@ -4,4 +4,4 @@ version = "0.1.0"
 authors = ["Ted Mielczarek <ted@mielczarek.org>"]
 
 [dependencies]
-fallible-streaming-iterator = "0.1.5"
+read-byte-slice = "0.1"

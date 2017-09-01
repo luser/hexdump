@@ -1,8 +1,7 @@
-extern crate fallible_streaming_iterator;
+extern crate read_byte_slice;
 
-use fallible_streaming_iterator::FallibleStreamingIterator;
-use std::cmp;
-use std::io::{self, BufRead, BufReader, BufWriter, Read, Write};
+use read_byte_slice::{ByteSliceIter, FallibleStreamingIterator};
+use std::io::{self, BufWriter, Read, Write};
 
 fn printable(b: &u8) -> char {
     let b = *b;
@@ -13,55 +12,13 @@ fn printable(b: &u8) -> char {
     }
 }
 
-struct ByteSliceIter<R>
-where
-    R: Read,
-{
-    inner: BufReader<R>,
-    buf: Vec<u8>,
-}
-
-impl<R> ByteSliceIter<R>
-where
-    R: Read,
-{
-    pub fn new(inner: R, slice_len: usize) -> ByteSliceIter<R> {
-        ByteSliceIter {
-            inner: BufReader::new(inner),
-            buf: Vec::with_capacity(slice_len),
-        }
-    }
-}
-
-impl<'a, R> FallibleStreamingIterator for ByteSliceIter<R>
-where
-    R: Read,
-{
-    type Item = [u8];
-    type Error = io::Error;
-
-    fn advance(&mut self) -> Result<(), io::Error> {
-        if self.buf.len() > 0 {
-            self.inner.consume(self.buf.len());
-            self.buf.clear();
-        }
-        let buf = self.inner.fill_buf()?;
-        let cap = self.buf.capacity();
-        self.buf.extend_from_slice(
-            &buf[..cmp::min(buf.len(), cap)],
-        );
-        Ok(())
-    }
-
-    fn get(&self) -> Option<&[u8]> {
-        if self.buf.len() > 0 {
-            Some(self.buf.as_slice())
-        } else {
-            None
-        }
-    }
-}
-
+/// Write a hexadecimal + ASCII dump of bytes read from `r` to `w`.
+///
+/// This function produces output equivalent to the default format of the `hd` tool,
+/// consisting of an 8-byte offset in hex, 16 space-separated octets each in hex, split into
+/// two groups of 8 octets each with two spaces between the groups, followed by an ASCII table
+/// with each octet that is a printable ASCII character rendered as such, and other octets
+/// rendered as an ASCII `FULL STOP` (`.`).
 pub fn hexdump<R, W>(r: R, w: W) -> io::Result<()>
 where
     R: Read,
@@ -78,15 +35,20 @@ where
             }
             write!(w, " ")?;
         }
-        // Pad out the rest of the line.
+        // Pad out the rest of the line if necessary.
         for _ in 0..16 - chunk.len() {
             write!(w, "   ")?;
         }
+        // Additional padding if the line is less than 8 bytes.
         if chunk.len() < 8 {
             write!(w, " ")?;
         }
-        write!(w, "|{}|", chunk.iter().map(printable).collect::<String>())?;
-        writeln!(w, "")?;
+        // Write the ASCII table.
+        write!(w, "|")?;
+        for b in chunk {
+            write!(w, "{}", printable(b))?
+        }
+        writeln!(w, "|")?;
         offset += chunk.len();
     }
     writeln!(w, "{:08x}", offset)?;
