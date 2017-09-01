@@ -2,7 +2,7 @@ extern crate fallible_streaming_iterator;
 
 use fallible_streaming_iterator::FallibleStreamingIterator;
 use std::cmp;
-use std::io::{self, BufRead, BufReader, Read, Write};
+use std::io::{self, BufRead, BufReader, BufWriter, Read, Write};
 
 fn printable(b: &u8) -> char {
     let b = *b;
@@ -62,11 +62,12 @@ where
     }
 }
 
-pub fn hexdump<R, W>(r: R, mut w: W) -> io::Result<()>
+pub fn hexdump<R, W>(r: R, w: W) -> io::Result<()>
 where
     R: Read,
     W: Write,
 {
+    let mut w = BufWriter::new(w);
     let mut iter = ByteSliceIter::new(r, 16);
     let mut offset = 0;
     while let Some(chunk) = iter.next()? {
