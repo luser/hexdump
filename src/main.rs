@@ -1,5 +1,6 @@
 extern crate hexdump;
 
+use hexdump::HexDump;
 use std::env;
 use std::ffi::OsString;
 use std::fs::File;
@@ -20,5 +21,7 @@ fn work(path: OsString) -> io::Result<()> {
     let f = File::open(&path)?;
     let stdout = io::stdout();
     let handle = stdout.lock();
-    hexdump::hexdump(f, handle)
+    HexDump::new()
+        .elide_repeated(true)
+        .hexdump(f, handle)
 }
