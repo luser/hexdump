@@ -1,27 +1,19 @@
-extern crate hexdump;
-
 use hexdump::HexDump;
-use std::env;
-use std::ffi::OsString;
-use std::fs::File;
-use std::io;
+use std::{env, fs::File, io};
+use termcolor::{BufferedStandardStream, ColorChoice, WriteColor};
 
-fn main() {
+fn main() -> io::Result<()> {
     let path = env::args_os().nth(1).expect("Usage: hexdump <filename>");
-    match work(path) {
-        Ok(_) => {}
-        Err(e) => {
-            eprintln!("Error: {}", e);
-            ::std::process::exit(1);
-        }
-    }
-}
-
-fn work(path: OsString) -> io::Result<()> {
     let f = File::open(&path)?;
-    let stdout = io::stdout();
-    let handle = stdout.lock();
-    HexDump::new()
+    let color = if atty::is(atty::Stream::Stdout) {
+        ColorChoice::Auto
+    } else {
+        ColorChoice::Never
+    };
+    let mut stdout = BufferedStandardStream::stdout(color);
+    let res = HexDump::new()
         .elide_repeated(true)
-        .hexdump(f, handle)
+        .hexdump(f, &mut stdout);
+    let _ = stdout.reset();
+    res
 }

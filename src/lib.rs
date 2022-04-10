@@ -1,7 +1,59 @@
-extern crate read_byte_slice;
-
 use read_byte_slice::{ByteSliceIter, FallibleStreamingIterator};
-use std::io::{self, BufWriter, Read, Write};
+use std::io::{self, Read};
+use termcolor::{Color, ColorSpec, WriteColor};
+
+/* TODO: can we build a lookup table from bytes to Braille characters at compile time?
+
+const N: usize = 256;
+const fn calculate_array() -> [char; N] {
+    let mut res = [' '; N];
+    let mut i = 0;
+    while i < res.len() {
+        res[i] = char::from_u32_unchecked(0x2800 + i as u32);
+        i += 1;
+    }
+    res
+}
+const BRAILLE: [char; N] = calculate_array();
+*/
+
+/// Take a `u8` and return a `char` from the [Unicode Braille Patterns][u]
+/// range representing the bits in that `u8`.
+///
+/// This is slightly more fiddly than I would like because Braille started
+/// with only 6 total dots, so the Unicode codepoints are arranged following
+/// that convention, with patterns including dots 7 and 8 tacked on at the end.
+///
+/// The Braille dots are numbered like so:
+///
+/// 1 4
+/// 2 5
+/// 3 6
+/// 7 8
+///
+/// And the code points are ordered as `U+2800 + <binary bit pattern>`, where
+/// the latter is simply counting from 0-255 in binary using the 8 dots as bits.
+///
+/// We want to produce output where the bits in the input `u8` map to dots
+/// in the output like so:
+///
+/// 1 5
+/// 2 6
+/// 3 7
+/// 4 8
+///
+/// To produce sensible looking results, then, we swap bit 4 in the input to
+/// bit 7 in the output, and shift bits 5, 6, and 7 in the input rightwards one
+/// bit in the output. Bits 1,2,3 and 8 remain unchanged.
+///
+/// [u]: https://unicode.org/charts/nameslist/n_2800.html
+fn braille_byte(b: u8) -> char {
+    let keep = b & 0b1000_0111;
+    let b4 = b & 0b1000;
+    let b567 = b & 0b0111_0000;
+    let shuffled = keep | (b567 >> 1) | (b4 << 3);
+    unsafe { char::from_u32_unchecked(0x2800 + u32::from(shuffled)) }
+}
 
 fn printable(b: &u8) -> char {
     let b = *b;
@@ -26,7 +78,7 @@ fn printable(b: &u8) -> char {
 pub fn hexdump<R, W>(r: R, w: W) -> io::Result<()>
 where
     R: Read,
-    W: Write,
+    W: WriteColor,
 {
     HexDump::new().hexdump(r, w)
 }
@@ -56,17 +108,22 @@ impl HexDump {
     }
 
     /// Write a hexadecimal dump of bytes read from `r` to `w`.
-    pub fn hexdump<R, W>(self, r: R, w: W) -> io::Result<()>
+    pub fn hexdump<R, W>(self, r: R, mut w: W) -> io::Result<()>
         where
         R: Read,
-        W: Write,
+        W: WriteColor,
     {
         let HexDump { elide_repeated } = self;
-        let mut w = BufWriter::new(w);
         let mut iter = ByteSliceIter::new(r, 16);
         let mut offset = 0;
         let mut prev = Vec::with_capacity(16);
         let mut elided_output = false;
+        let mut bw = ColorSpec::new();
+        bw.set_bg(Some(Color::Black)).set_fg(Some(Color::White));
+        let mut wb = ColorSpec::new();
+        wb.set_bg(Some(Color::White)).set_fg(Some(Color::Black));
+        let colors = [bw, wb];
+        let mut color_iter = colors.iter().cloned().cycle();
         while let Some(chunk) = iter.next()? {
             let current = offset;
             offset += chunk.len();
@@ -84,10 +141,16 @@ impl HexDump {
             write!(w, "{:08x}  ", current)?;
             for c in chunk.chunks(8) {
                 for b in c {
-                    write!(w, "{:02x} ", b)?;
+                    let byte_color = color_iter.next().unwrap();
+                    let _ = w.set_color(&byte_color);
+                    write!(w, "{}", braille_byte(*b))?;
                 }
+                let _ = w.reset();
                 write!(w, " ")?;
             }
+            // Skip the next color so byte colors will alternate line-by-line.
+            let _ = color_iter.next();
+
             // Pad out the rest of the line if necessary.
             for _ in 0..16 - chunk.len() {
                 write!(w, "   ")?;

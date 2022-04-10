@@ -2,6 +2,9 @@
 name = "hexdump"
 version = "0.1.0"
 authors = ["Ted Mielczarek <ted@mielczarek.org>"]
+edition = "2018"
 
 [dependencies]
-read-byte-slice = "0.1"
+read-byte-slice = "0.1.2"
+atty = "0.2.14"
+termcolor = "1.1.3"
